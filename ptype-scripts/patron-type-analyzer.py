@@ -90,13 +90,30 @@ class AlmaPatronTypeAnalyzer:
         """
         print("Fetching all patron types from Alma...")
         
-        response = self.call_alma_api("/conf/user-groups")
+        # Try the correct endpoint for user groups
+        response = self.call_alma_api("/conf/code-tables/UserGroups")
         
-        if not response or 'user_group' not in response:
+        if not response:
             print("❌ Failed to retrieve patron types")
             return []
         
-        patron_types = response['user_group']
+        # Parse the code table response
+        patron_types = []
+        if 'row' in response:
+            rows = response['row']
+            if isinstance(rows, list):
+                for row in rows:
+                    patron_types.append({
+                        'value': row.get('code', ''),
+                        'desc': row.get('description', '')
+                    })
+            else:
+                # Single row case
+                patron_types.append({
+                    'value': rows.get('code', ''),
+                    'desc': rows.get('description', '')
+                })
+        
         print(f"✅ Found {len(patron_types)} patron types")
         
         return patron_types
