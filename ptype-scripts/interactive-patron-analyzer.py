@@ -250,8 +250,8 @@ def main():
         print("\n⏳ Testing Alma API connection...")
         analyzer = AlmaPatronTypeAnalyzer()
         
-        # Quick test
-        test_response = analyzer.call_alma_api("/conf/user-groups", suppress_errors=True)
+        # Quick test using the working endpoint
+        test_response = analyzer.call_alma_api("/conf/code-tables/UserGroups", suppress_errors=True)
         if not test_response:
             print("❌ Failed to connect to Alma API. Please check your credentials.")
             print("Make sure you have a .env file with ALMA_API_KEY and ALMA_API_BASE_URL")
