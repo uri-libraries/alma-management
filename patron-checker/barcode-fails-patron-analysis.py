@@ -147,6 +147,10 @@ def extract_patron_info(user_data):
     expiry_date_str = user_data.get('expiry_date', '')
     expiry_date = parse_alma_date(expiry_date_str)
     
+    # Creation date
+    created_date_str = user_data.get('created_date', user_data.get('record_created_date', ''))
+    created_date = parse_alma_date(created_date_str)
+    
     # Status
     status = user_data.get('status', {})
     if isinstance(status, dict):
@@ -163,6 +167,8 @@ def extract_patron_info(user_data):
         'patron_type': patron_type,
         'expiry_date': expiry_date,
         'expiry_date_string': expiry_date_str,
+        'created_date': created_date,
+        'created_date_string': created_date_str,
         'status': status_value,
         'is_expired': expiry_date < datetime.now() if expiry_date else None
     }
@@ -247,6 +253,70 @@ def analyze_patrons_batch(user_ids, max_workers=3):
         }
     }
 
+def analyze_creation_dates(successful_patrons):
+    """
+    Analyze patron creation date patterns.
+    
+    Args:
+        successful_patrons (list): List of successful patron data
+        
+    Returns:
+        dict: Creation date analysis statistics
+    """
+    now = datetime.now()
+    creation_dates = []
+    no_creation_date = 0
+    
+    for patron in successful_patrons:
+        if patron.get('created_date'):
+            creation_dates.append(patron['created_date'])
+        else:
+            no_creation_date += 1
+    
+    if not creation_dates:
+        return {
+            'accounts_with_creation_date': 0,
+            'accounts_without_creation_date': no_creation_date,
+            'oldest_account': None,
+            'newest_account': None,
+            'creation_by_year': {},
+            'recent_creations': {
+                'last_30_days': 0,
+                'last_90_days': 0,
+                'last_year': 0
+            }
+        }
+    
+    # Sort dates for analysis
+    creation_dates.sort()
+    oldest = creation_dates[0]
+    newest = creation_dates[-1]
+    
+    # Count by year
+    creation_by_year = Counter(date.year for date in creation_dates)
+    
+    # Recent creation analysis
+    thirty_days_ago = now - timedelta(days=30)
+    ninety_days_ago = now - timedelta(days=90)
+    one_year_ago = now - timedelta(days=365)
+    
+    recent_30 = len([d for d in creation_dates if d >= thirty_days_ago])
+    recent_90 = len([d for d in creation_dates if d >= ninety_days_ago])
+    recent_year = len([d for d in creation_dates if d >= one_year_ago])
+    
+    return {
+        'accounts_with_creation_date': len(creation_dates),
+        'accounts_without_creation_date': no_creation_date,
+        'oldest_account': oldest,
+        'newest_account': newest,
+        'creation_by_year': dict(sorted(creation_by_year.items())),
+        'recent_creations': {
+            'last_30_days': recent_30,
+            'last_90_days': recent_90,
+            'last_year': recent_year
+        }
+    }
+
 def generate_analysis_summary(results):
     """
     Generate a comprehensive analysis summary.
@@ -265,7 +335,19 @@ def generate_analysis_summary(results):
             'summary': 'No successful patron data retrieved',
             'patron_type_distribution': {},
             'expiration_analysis': {},
-            'status_distribution': {}
+            'status_distribution': {},
+            'creation_analysis': {
+                'accounts_with_creation_date': 0,
+                'accounts_without_creation_date': 0,
+                'oldest_account': None,
+                'newest_account': None,
+                'creation_by_year': {},
+                'recent_creations': {
+                    'last_30_days': 0,
+                    'last_90_days': 0,
+                    'last_year': 0
+                }
+            }
         }
     
     # Patron type distribution
@@ -296,6 +378,9 @@ def generate_analysis_summary(results):
     valid_emails = len([p for p in successful_patrons if p['email'] != 'N/A' and '@' in p['email']])
     missing_emails = len([p for p in successful_patrons if p['email'] == 'N/A'])
     
+    # Creation date analysis
+    creation_analysis = analyze_creation_dates(successful_patrons)
+    
     return {
         'summary': {
             'total_patrons_analyzed': len(successful_patrons),
@@ -313,7 +398,8 @@ def generate_analysis_summary(results):
             'valid_emails': valid_emails,
             'missing_emails': missing_emails,
             'email_completion_rate': f"{(valid_emails / len(successful_patrons) * 100):.1f}%" if successful_patrons else "0%"
-        }
+        },
+        'creation_analysis': creation_analysis
     }
 
 def save_results_to_json(results, filename):
@@ -382,6 +468,28 @@ def print_summary_report(analysis_summary):
     print(f"  Valid emails: {email_analysis['valid_emails']}")
     print(f"  Missing emails: {email_analysis['missing_emails']}")
     print(f"  Email completion rate: {email_analysis['email_completion_rate']}")
+    
+    # Creation date analysis
+    creation_analysis = analysis_summary['creation_analysis']
+    print(f"\nAccount Creation Analysis:")
+    print(f"  Accounts with creation date: {creation_analysis['accounts_with_creation_date']}")
+    print(f"  Accounts without creation date: {creation_analysis['accounts_without_creation_date']}")
+    
+    if creation_analysis['oldest_account']:
+        print(f"  Oldest account created: {creation_analysis['oldest_account'].strftime('%Y-%m-%d')}")
+        print(f"  Newest account created: {creation_analysis['newest_account'].strftime('%Y-%m-%d')}")
+        
+        # Recent creations
+        recent = creation_analysis['recent_creations']
+        print(f"  Created in last 30 days: {recent['last_30_days']}")
+        print(f"  Created in last 90 days: {recent['last_90_days']}")
+        print(f"  Created in last year: {recent['last_year']}")
+        
+        # Top creation years
+        print(f"  Creation by year (top 5):")
+        sorted_years = sorted(creation_analysis['creation_by_year'].items(), key=lambda x: x[1], reverse=True)[:5]
+        for year, count in sorted_years:
+            print(f"    {year}: {count} accounts")
     
     print("\n" + "="*60)
 
