@@ -7,11 +7,11 @@
       <xsl:apply-templates select="@*|node()"/>
     </xsl:copy>
   </xsl:template>
-  <!-- Replace phone_type 'alternative' with 'home' -->
+  <!-- Replaces phone type 'alternative' with 'home' -->
   <xsl:template match="phone_types/phone_type[text()='alternative']">
     <phone_type desc="Home">home</phone_type>
   </xsl:template>
-  <!-- Optional: Replace any invalid phone_type with 'home' -->
+  <!-- Replaces any invalid phone type with 'home' -->
   <xsl:template match="phone_types/phone_type[not(.='home' or .='mobile' or .='work' or .='fax')]">
     <phone_type desc="Home">home</phone_type>
   </xsl:template>
