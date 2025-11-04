@@ -68,8 +68,19 @@ function Call-AlmaApi {
         throw "Missing Alma API credentials. Ensure ALMA_API_BASE_URL and ALMA_API_KEY are set."
     }
 
-    $queryString = ($Params.GetEnumerator() | ForEach-Object { "{0}={1}" -f $_.Key, $_.Value }) -join "&"
-    $uri = "$baseUrl/$($Endpoint.TrimStart('/'))?$queryString"
+    $queryString = if ($Params) {
+        ($Params.GetEnumerator() | ForEach-Object { "{0}={1}" -f $_.Key, $_.Value }) -join "&"
+    } else {
+        ""
+    }
+    $uri = "$baseUrl/almaws/v1/$($Endpoint.TrimStart('/'))?$queryString"
+
+    # Ensure proper parameters for loan policies
+    if ($Endpoint -eq "/conf/loan-policies" -and -not $Params.ContainsKey("user_group")) {
+        Write-Warning "Missing required parameter 'user_group' for loan policies API."
+        return $null
+    }
+
     $headers = @{ Authorization = "apikey $apiKey" }
 
     for ($attempt = 1; $attempt -le $RetryCount; $attempt++) {
@@ -78,6 +89,9 @@ function Call-AlmaApi {
         } catch {
             Write-Verbose "API call failed: $($_.Exception.Message)"
             Write-Verbose "Response: $($_ | Out-String)"
+            Write-Verbose "User ID: $userId, Endpoint: /users/$userId?view=full"
+            Write-Verbose "Full API Response: $($_ | Out-String)"
+            Write-Verbose "Attempted URL: $uri"
 
             if ($attempt -eq $RetryCount) {
                 throw "API call failed after $RetryCount attempts: $uri"
@@ -87,44 +101,135 @@ function Call-AlmaApi {
     }
 }
 
-# Analyze privileges
-function Analyze-Privileges {
-    $patronTypes = @("Staff", "Faculty", "Adjunct", "FacultyStaff")
-    $results = @()
+# Enhanced Get-LoanPolicies function to accept dynamic parameters
+function Get-LoanPolicies {
+    param (
+        [hashtable]$Params
+    )
 
-    foreach ($type in $patronTypes) {
-        Write-Host "🔍 Analyzing privileges for patron type: $type" -ForegroundColor Blue
+    Write-Host "🔍 Fetching loan policies with parameters: $($Params | ConvertTo-Json -Depth 10)" -ForegroundColor Blue
 
-        # Adjusted to fetch users by specific identifiers or groups
-        Write-Warning "The Alma API does not support filtering users by status or patron type directly. Please provide specific user identifiers or groups to analyze."
-        return
+    $policies = Call-AlmaApi "/conf/loan-policies" $Params
 
-        $response = Call-AlmaApi "/users" @{ "q" = "status~ACTIVE"; "limit" = 100 }  # Fetch active users
-        $filteredUsers = $response.user | Where-Object { $_.user_group.value -eq $type }
+    if (-not $policies) {
+        Write-Warning "Could not retrieve loan policies with provided parameters."
+        return $null
+    }
 
-        if (-not $filteredUsers) {
-            Write-Warning "No users found for patron type: $type"
-            continue
-        }
+    return $policies
+}
 
-        $user = $filteredUsers | Select-Object -First 1
-        $fullUser = Call-AlmaApi "/users/$($user.primary_id)" @{ "view" = "full" }
+# Enhanced privilege comparison with detailed differences
+function Compare-Privileges {
+    param (
+        [array]$UserDetails
+    )
 
-        $privileges = $fullUser.user_roles.user_role | ForEach-Object {
-            [PSCustomObject]@{
-                Role = $_.role_type.value
-                Scope = $_.scope.value
-                Status = $_.status.value
-            }
-        }
+    $comparisonResults = @()
 
-        $results += [PSCustomObject]@{
+    foreach ($type in $UserDetails.Keys) {
+        $roles = $UserDetails[$type].user_role
+        $loanPolicies = Get-LoanPolicies -Params @{ "user_group" = $UserDetails[$type].user_group }
+
+        $comparisonResults += [PSCustomObject]@{
             PatronType = $type
-            Privileges = $privileges
+            Roles = ($roles | ForEach-Object { $_.role_type }) -join ", "
+            LoanPolicies = if ($loanPolicies) {
+                ($loanPolicies | ForEach-Object { $_.name }) -join ", "
+            } else {
+                "None"
+            }
         }
     }
 
-    return $results
+    # Compare roles, privileges, and policies
+    Write-Host "🔍 Comparing roles, privileges, and policies..." -ForegroundColor Blue
+    foreach ($result in $comparisonResults) {
+        Write-Host "Patron Type: $($result.PatronType)" -ForegroundColor Green
+        Write-Host "Roles: $($result.Roles)" -ForegroundColor Yellow
+        Write-Host "Loan Policies: $($result.LoanPolicies)" -ForegroundColor Cyan
+    }
+
+    # Export to CSV
+    $comparisonResults | Export-Csv -Path "./privilege_comparison.csv" -NoTypeInformation
+    Write-Host "✅ Comparison results exported to privilege_comparison.csv" -ForegroundColor Green
+}
+
+# Corrected Analyze-Privileges function to properly access response content
+function Analyze-Privileges {
+    $userIdentifiers = @{
+        Faculty = "21222005633826"
+        Staff = "21222005729855"
+        FacultyStaff = "21222001475602"
+        Adjunct = "21222006466770"
+    }
+    $userDetails = @{}
+
+    foreach ($type in $userIdentifiers.Keys) {
+        Write-Host "🔍 Analyzing privileges for patron type: $type" -ForegroundColor Blue
+
+        $userId = $userIdentifiers[$type]
+        try {
+            $response = Invoke-WebRequest -Uri "$([Environment]::GetEnvironmentVariable('ALMA_API_BASE_URL'))/almaws/v1/users/$userId?view=full" -Headers @{ Authorization = "apikey $([Environment]::GetEnvironmentVariable('ALMA_API_KEY'))" } -Method GET -ErrorAction Stop
+            $rawResponse = $response.Content | ConvertFrom-Json
+            Write-Host "Raw API Response for ${type}:" -ForegroundColor Cyan
+            Write-Host ($rawResponse | ConvertTo-Json -Depth 10)
+        } catch {
+            Write-Warning "Failed to fetch user details for user ID: $userId. Error: $($_.Exception.Message)"
+
+            # Log detailed response for HTTP errors
+            if ($_.Exception.Response -and $_.Exception.Response.Content) {
+                try {
+                    $responseBody = $_.Exception.Response.Content.ReadAsStringAsync().Result
+                    Write-Host "Response Body for HTTP Error:" -ForegroundColor Yellow
+                    Write-Host $responseBody
+                } catch {
+                    Write-Warning "Failed to read response body. Error: $($_.Exception.Message)"
+                }
+            }
+
+            continue
+        }
+
+        $fullUser = $rawResponse
+        if (-not $fullUser) {
+            Write-Warning "Could not retrieve details for user ID: $userId"
+            continue
+        }
+
+        $userDetails[$type] = $fullUser
+
+        # Inspect user group field
+        $userGroup = $fullUser.user_group
+        if (-not $userGroup) {
+            Write-Warning "User group not found for user ID: $userId. Skipping loan policy retrieval."
+            continue
+        }
+
+        # Fetch loan policies with user group
+        $params = @{ "user_group" = $userGroup }
+        if (-not $params.ContainsKey("library")) {
+            $params["library"] = "MAIN"  # Default library
+        }
+        if (-not $params.ContainsKey("circ_desk")) {
+            $params["circ_desk"] = "DEFAULT_CIRC"  # Default circulation desk
+        }
+
+        try {
+            $loanPolicies = Get-LoanPolicies -Params $params
+
+            if (-not $loanPolicies) {
+                Write-Warning "API call failed for user group: ${userGroup}. Check permissions or parameters."
+            } else {
+                Write-Host "Loan Policies for ${type}: $(${loanPolicies | ConvertTo-Json -Depth 10})" -ForegroundColor Cyan
+            }
+        } catch {
+            Write-Host "Error occurred during API call for user group: ${userGroup}" -ForegroundColor Red
+            Write-Host "Error Details: $($_ | Out-String)" -ForegroundColor Yellow
+        }
+    }
+
+    Compare-Privileges -UserDetails $userDetails
 }
 
 # Main script
