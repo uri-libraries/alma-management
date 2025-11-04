@@ -1,20 +1,11 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Alma Patron Expiration Analyzer - Analyzes expiration rates by patron type
+    Alma Total Expired Users Counter - Counts total expired users in Alma
     
 .DESCRIPTION
-    Analyzes specific patron types to determine what percentage of users 
-    in each type have expired accounts.
-    
-.PARAMETER PatronTypes
-    Array of patron type codes to analyze (default: predefined list)
-    
-.PARAMETER OutputFile
-    Path to save CSV output (optional)
-    
-.PARAMETER SampleSize
-    Maximum number of users to analyze per patron type (default: 1000)
+    Counts the total number of users in Alma whose accounts have expired,
+    by analyzing specific patron types.
     
 .PARAMETER Environment
     Alma environment: SANDBOX or PRODUCTION (overrides .env file)
@@ -23,23 +14,10 @@
     .\PatronExpirationAnalyzer.ps1
     
 .EXAMPLE
-    .\PatronExpirationAnalyzer.ps1 -OutputFile "expiration_analysis.csv"
-    
-.EXAMPLE
-    .\PatronExpirationAnalyzer.ps1 -PatronTypes @("HELINUndergraduate", "VisitingFaculty") -SampleSize 500
+    .\PatronExpirationAnalyzer.ps1 -Environment SANDBOX
 #>
 
 param(
-    [Parameter(Mandatory=$false)]
-    [string[]]$PatronTypes = @("HELINUndergraduate", "VisitingFaculty", "Internal", "InternationalSchola", "AdHoc", "HighSchool"),
-    
-    [Parameter(Mandatory=$false)]
-    [string]$OutputFile,
-    
-    [Parameter(Mandatory=$false)]
-    [ValidateRange(10, 5000)]
-    [int]$SampleSize = 1000,
-    
     [Parameter(Mandatory=$false)]
     [ValidateSet("SANDBOX", "PRODUCTION")]
     [string]$Environment
@@ -51,7 +29,7 @@ $ProgressPreference = "Continue"
 
 # Script metadata
 $ScriptVersion = "1.0.0"
-$ScriptName = "Alma Patron Expiration Analyzer"
+$ScriptName = "Alma Total Expired Users Counter"
 
 #region Helper Functions
 
@@ -226,369 +204,170 @@ class AlmaExpirationAnalyzer {
         return $null
     }
     
-    [hashtable] AnalyzePatronTypeExpiration([string]$PatronTypeCode, [int]$MaxUsers) {
-        Write-Host "🔍 Analyzing patron type: $PatronTypeCode" -ForegroundColor "Blue"
+    [int] CountTotalExpiredUsers() {
+        Write-Host "🔍 Investigating user data structure for expiry information..." -ForegroundColor "Blue"
         
-        # Get users for this patron type with full details
+        # Sample a few users to inspect their full structure
         $params = @{
-            'q' = "user_group~$PatronTypeCode"
-            'limit' = $MaxUsers
+            'limit' = 5
             'offset' = 0
-            'expand' = 'none'
             'view' = 'full'
         }
         
         $response = $this.CallAlmaApi("/users", $params, 3)
         
-        $result = @{
-            PatronType = $PatronTypeCode
-            TotalFound = 0
-            TotalAnalyzed = 0
-            ExpiredCount = 0
-            ActiveCount = 0
-            ExpirationRate = 0.0
-            Users = @()
-            Error = $null
-        }
-        
-        if (-not $response) {
-            $result.Error = "Failed to retrieve users for patron type $PatronTypeCode"
-            return $result
-        }
-        
-        $result.TotalFound = [int]$response.total_record_count
-        
-        if ($response.user) {
+        if ($response -and $response.user) {
             $users = if ($response.user -is [array]) { $response.user } else { @($response.user) }
-            $result.TotalAnalyzed = $users.Count
             
-            $currentDate = Get-Date
+            Write-Host "Inspecting user data structure..." -ForegroundColor "Yellow"
             
-            foreach ($user in $users) {
-                # Get full user details to access creation date and other fields
-                Write-Verbose "Fetching full details for user: $($user.primary_id)"
-                $fullUser = $this.CallAlmaApi("/users/$($user.primary_id)", @{'view' = 'full'; 'expand' = 'none'}, 2)
+            foreach ($user in $users[0..2]) {  # Check first 3 users
+                Write-Host "`nUser: $($user.primary_id)" -ForegroundColor "Cyan"
                 
-                if (-not $fullUser) {
-                    Write-Warning "Could not retrieve full details for user $($user.primary_id)"
-                    continue
+                # Check various potential expiry fields
+                $fields = @(
+                    'expiry_date',
+                    'purge_date', 
+                    'account_type',
+                    'status'
+                )
+                
+                foreach ($field in $fields) {
+                    if ($user.$field) {
+                        Write-Host "  $field : $($user.$field | ConvertTo-Json -Compress)" -ForegroundColor "Gray"
+                    }
                 }
                 
-                $isExpired = $false
-                $expiryDate = $null
-                $daysSinceExpiry = $null
+                # Check if there are user identifiers with expiry info
+                if ($user.user_identifier) {
+                    Write-Host "  user_identifier:" -ForegroundColor "Gray"
+                    $identifiers = if ($user.user_identifier -is [array]) { $user.user_identifier } else { @($user.user_identifier) }
+                    foreach ($id in $identifiers) {
+                        Write-Host "    Type: $($id.id_type.value), Value: $($id.value)" -ForegroundColor "DarkGray"
+                    }
+                }
                 
-                # Parse expiry date from full user record
-                if ($fullUser.expiry_date) {
-                    try {
-                        $expiryDate = [DateTime]::Parse($fullUser.expiry_date)
-                        $isExpired = $expiryDate -lt $currentDate
-                        
-                        if ($isExpired) {
-                            $daysSinceExpiry = ($currentDate - $expiryDate).Days
+                # Check user roles for expiry
+                if ($user.user_role) {
+                    Write-Host "  user_role:" -ForegroundColor "Gray"
+                    $roles = if ($user.user_role -is [array]) { $user.user_role } else { @($user.user_role) }
+                    foreach ($role in $roles) {
+                        Write-Host "    Role: $($role.role_type.value)" -ForegroundColor "DarkGray"
+                        if ($role.expiry_date) {
+                            Write-Host "      Expiry: $($role.expiry_date)" -ForegroundColor "Red"
                         }
                     }
-                    catch {
-                        Write-Verbose "Could not parse expiry date for user $($fullUser.primary_id): $($fullUser.expiry_date)"
-                    }
                 }
                 
-                # Count expired vs active
-                if ($isExpired) {
-                    $result.ExpiredCount++
-                } else {
-                    $result.ActiveCount++
-                }
-                
-                # Parse creation date from full user record
-                $createdDate = $null
-                $daysSinceCreation = $null
-                
-                if ($fullUser.created_date) {
-                    try {
-                        $createdDate = [DateTime]::Parse($fullUser.created_date)
-                        $daysSinceCreation = ($currentDate - $createdDate).Days
-                        Write-Verbose "Successfully parsed creation date for $($fullUser.primary_id): $createdDate ($daysSinceCreation days ago)"
-                    }
-                    catch {
-                        Write-Verbose "Could not parse creation date for user $($fullUser.primary_id): $($fullUser.created_date)"
-                    }
-                } else {
-                    Write-Verbose "No created_date property found for user $($fullUser.primary_id)"
-                }
-                
-                # Store user details for analysis (using full user record)
-                $result.Users += @{
-                    PrimaryId = $fullUser.primary_id
-                    Status = $fullUser.status.value
-                    ExpiryDate = $expiryDate
-                    IsExpired = $isExpired
-                    DaysSinceExpiry = $daysSinceExpiry
-                    CreatedDate = $createdDate
-                    DaysSinceCreation = $daysSinceCreation
-                    CreatedBy = $fullUser.created_by
-                    FirstName = $fullUser.first_name
-                    LastName = $fullUser.last_name
-                    UserGroup = $fullUser.user_group.value
+                Write-Host "  ---" -ForegroundColor "DarkGray"
+            }
+        }
+        
+        # Try direct query for inactive users (likely what "expired" means)
+        Write-Host "`n🔍 Querying for INACTIVE users..." -ForegroundColor "Blue"
+        
+        $params = @{
+            'q' = 'status~INACTIVE'
+            'limit' = 1
+            'view' = 'brief'
+        }
+        
+        $response = $this.CallAlmaApi("/users", $params, 3)
+        
+        if ($response -and $response.total_record_count -gt 0) {
+            $inactiveCount = [int]$response.total_record_count
+            Write-Host "   📊 Found $inactiveCount INACTIVE users" -ForegroundColor "Green"
+            return $inactiveCount
+        }
+        
+        # Try other status queries
+        Write-Host "`n🔍 Trying other status queries..." -ForegroundColor "Blue"
+        
+        $statusQueries = @(
+            'status~EXPIRED',
+            'status~DELETED', 
+            'status~SUSPENDED',
+            'account_type~EXPIRED'
+        )
+        
+        $totalFound = 0
+        
+        foreach ($query in $statusQueries) {
+            Write-Host "Trying query: $query" -ForegroundColor "Yellow"
+            
+            $params = @{
+                'q' = $query
+                'limit' = 1
+                'view' = 'brief'
+            }
+            
+            $response = $this.CallAlmaApi("/users", $params, 3)
+            
+            if ($response -and $response.total_record_count -gt 0) {
+                $count = [int]$response.total_record_count
+                Write-Host "Found $count users with query: $query" -ForegroundColor "Green"
+                $totalFound += $count
+            }
+        }
+        
+        if ($totalFound -gt 0) {
+            Write-Host "   📊 Total users found with non-active status: $totalFound" -ForegroundColor "Green"
+            return $totalFound
+        }
+        
+        # Manual sampling to count inactive users
+        Write-Host "`n🔍 Sampling users to count inactive status..." -ForegroundColor "Blue"
+        
+        $totalInactive = 0
+        $offset = 0
+        $limit = 100
+        $totalProcessed = 0
+        $sampleSize = 5000  # Sample 5K users for accurate estimate
+        
+        while ($offset -lt $sampleSize) {
+            $params = @{
+                'limit' = $limit
+                'offset' = $offset
+                'view' = 'brief'  # Use brief for faster processing
+            }
+            
+            $response = $this.CallAlmaApi("/users", $params, 3)
+            
+            if (-not $response -or -not $response.user) {
+                break
+            }
+            
+            $users = if ($response.user -is [array]) { $response.user } else { @($response.user) }
+            $totalProcessed += $users.Count
+            
+            foreach ($user in $users) {
+                if ($user.status -and $user.status.value -ne "ACTIVE") {
+                    $totalInactive++
+                    Write-Host "Found non-active user: $($user.primary_id) - Status: $($user.status.value)" -ForegroundColor "Red"
                 }
             }
             
-            # Calculate expiration rate
-            if ($result.TotalAnalyzed -gt 0) {
-                $result.ExpirationRate = ($result.ExpiredCount / $result.TotalAnalyzed) * 100
+            if ($totalProcessed % 500 -eq 0) {
+                Write-Host "Processed $totalProcessed users, found $totalInactive inactive" -ForegroundColor "Blue"
             }
-        }
-        
-        Write-Host "   📊 Results: $($result.TotalAnalyzed) users analyzed, $($result.ExpiredCount) expired ($($result.ExpirationRate.ToString('F1'))%)" -ForegroundColor "Green"
-        
-        return $result
-    }
-    
-    [hashtable] AnalyzeMultiplePatronTypes([string[]]$PatronTypes, [int]$MaxUsersPerType) {
-        Write-Header "Alma Patron Expiration Analyzer - Analysis Report" "Cyan"
-        Write-Host "Started: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -ForegroundColor "Blue"
-        Write-Host "Analyzing $($PatronTypes.Count) patron types with up to $MaxUsersPerType users each" -ForegroundColor "Blue"
-        Write-Host ""
-        
-        $results = @()
-        $totalUsers = 0
-        $totalExpired = 0
-        
-        $counter = 0
-        foreach ($patronType in $PatronTypes) {
-            $counter++
-            $percentComplete = ($counter / $PatronTypes.Count) * 100
-            Write-Progress -Activity "Analyzing patron type expiration rates" -Status "Processing: $patronType" -PercentComplete $percentComplete
             
-            $typeResult = $this.AnalyzePatronTypeExpiration($patronType, $MaxUsersPerType)
-            $results += $typeResult
+            $offset += $limit
             
-            $totalUsers += $typeResult.TotalAnalyzed
-            $totalExpired += $typeResult.ExpiredCount
-        }
-        
-        Write-Progress -Activity "Analyzing patron type expiration rates" -Completed
-        
-        # Calculate overall statistics
-        $overallExpirationRate = if ($totalUsers -gt 0) { ($totalExpired / $totalUsers) * 100 } else { 0.0 }
-        
-        return @{
-            Results = $results
-            Summary = @{
-                TotalPatronTypes = $PatronTypes.Count
-                TotalUsersAnalyzed = $totalUsers
-                TotalExpiredUsers = $totalExpired
-                OverallExpirationRate = $overallExpirationRate
-                ProcessingTime = (Get-Date) - $this.StartTime
-                ApiCalls = $this.RequestCount
-            }
-        }
-    }
-}
-
-#endregion
-
-#region Display Functions
-
-function Show-ExpirationAnalysis {
-    param(
-        [hashtable]$Analysis,
-        [string]$OutputFile
-    )
-    
-    $summary = $Analysis.Summary
-    $results = $Analysis.Results
-    
-    Write-Section "📊 EXPIRATION ANALYSIS SUMMARY" "Cyan"
-    
-    Write-Host "Analysis completed: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
-    Write-Host "Patron types analyzed: $($summary.TotalPatronTypes)"
-    Write-Host "Total users analyzed: $($summary.TotalUsersAnalyzed.ToString('N0'))"
-    Write-Host "Total expired users: $($summary.TotalExpiredUsers.ToString('N0'))"
-    Write-Host "Overall expiration rate: $($summary.OverallExpirationRate.ToString('F1'))%"
-    Write-Host "Processing time: $($summary.ProcessingTime.ToString('mm\:ss'))"
-    Write-Host "API calls made: $($summary.ApiCalls.ToString('N0'))"
-    Write-Host ""
-    
-    # Detailed results by patron type
-    Write-Section "🎯 EXPIRATION RATES BY PATRON TYPE" "Yellow"
-    
-    # Sort results by expiration rate (highest first)
-    $sortedResults = $results | Where-Object { -not $_.Error } | Sort-Object ExpirationRate -Descending
-    
-    # Table header
-    $headerFormat = "{0,-20} | {1,8} | {2,8} | {3,8} | {4,10} | {5,12} | {6,-15}"
-    Write-Host ($headerFormat -f "Patron Type", "Total", "Analyzed", "Expired", "Rate %", "Avg Age", "Status") -ForegroundColor "DarkGray"
-    Write-Host ("─" * 100) -ForegroundColor "DarkGray"
-    
-    # Table rows
-    foreach ($result in $sortedResults) {
-        $patronType = $result.PatronType.Substring(0, [Math]::Min(19, $result.PatronType.Length))
-        $total = $result.TotalFound.ToString('N0')
-        $analyzed = $result.TotalAnalyzed.ToString('N0')
-        $expired = $result.ExpiredCount.ToString('N0')
-        $rate = $result.ExpirationRate.ToString('F1')
-        
-        # Calculate average age of accounts (days since creation)
-        $usersWithCreationDate = $result.Users | Where-Object { $_.DaysSinceCreation -ne $null }
-        $avgAge = if ($usersWithCreationDate.Count -gt 0) {
-            $totalDays = ($usersWithCreationDate | Measure-Object -Property DaysSinceCreation -Sum).Sum
-            $avgDays = $totalDays / $usersWithCreationDate.Count
-            if ($avgDays -gt 365) {
-                "$([Math]::Round($avgDays / 365, 1))y"
-            } else {
-                "$([Math]::Round($avgDays))d"
-            }
-        } else {
-            "Unknown"
-        }
-        
-        # Color coding based on expiration rate
-        $rowColor = if ($result.ExpirationRate -gt 50) { 
-            "Red"           # High expiration rate
-        } elseif ($result.ExpirationRate -gt 25) { 
-            "Yellow"        # Medium expiration rate
-        } elseif ($result.ExpirationRate -gt 0) { 
-            "Green"         # Low expiration rate
-        } else { 
-            "Cyan"          # No expired users
-        }
-        
-        $status = if ($result.ExpirationRate -gt 50) { 
-            "HIGH EXPIRY"
-        } elseif ($result.ExpirationRate -gt 25) { 
-            "MEDIUM EXPIRY"
-        } elseif ($result.ExpirationRate -gt 0) { 
-            "LOW EXPIRY"
-        } else { 
-            "ALL ACTIVE"
-        }
-        
-        Write-Host ($headerFormat -f $patronType, $total, $analyzed, $expired, $rate, $avgAge, $status) -ForegroundColor $rowColor
-    }
-    
-    # Show errors if any
-    $errorResults = $results | Where-Object { $_.Error }
-    if ($errorResults) {
-        Write-Section "⚠️ ANALYSIS ERRORS" "Red"
-        foreach ($errorResult in $errorResults) {
-            Write-Host "❌ $($errorResult.PatronType): $($errorResult.Error)" -ForegroundColor "Red"
-        }
-    }
-    
-    # Recommendations
-    Write-Section "💡 RECOMMENDATIONS" "Cyan"
-    
-    $highExpiryTypes = $sortedResults | Where-Object { $_.ExpirationRate -gt 50 }
-    $mediumExpiryTypes = $sortedResults | Where-Object { $_.ExpirationRate -gt 25 -and $_.ExpirationRate -le 50 }
-    $activeTypes = $sortedResults | Where-Object { $_.ExpirationRate -eq 0 }
-    
-    if ($highExpiryTypes) {
-        Write-Host "🔴 HIGH EXPIRATION RATE PATRON TYPES:" -ForegroundColor "Red"
-        foreach ($type in $highExpiryTypes) {
-            Write-Host "   • $($type.PatronType) - $($type.ExpirationRate.ToString('F1'))% expired" -ForegroundColor "Red"
-        }
-        Write-Host "   → Consider cleanup or review expiration policies" -ForegroundColor "Blue"
-        Write-Host ""
-    }
-    
-    if ($mediumExpiryTypes) {
-        Write-Host "🟡 MEDIUM EXPIRATION RATE PATRON TYPES:" -ForegroundColor "Yellow"
-        foreach ($type in $mediumExpiryTypes) {
-            Write-Host "   • $($type.PatronType) - $($type.ExpirationRate.ToString('F1'))% expired" -ForegroundColor "Yellow"
-        }
-        Write-Host "   → Monitor and consider proactive renewal processes" -ForegroundColor "Blue"
-        Write-Host ""
-    }
-    
-    if ($activeTypes) {
-        Write-Host "🟢 PATRON TYPES WITH NO EXPIRED USERS:" -ForegroundColor "Green"
-        foreach ($type in $activeTypes) {
-            Write-Host "   • $($type.PatronType) - All $($type.TotalAnalyzed) users active" -ForegroundColor "Green"
-        }
-        Write-Host "   → Well-managed patron types with current expiration policies" -ForegroundColor "Blue"
-    }
-    
-    # Export to CSV if requested
-    if ($OutputFile) {
-        Export-ExpirationAnalysis -Analysis $Analysis -OutputFile $OutputFile
-    }
-}
-
-function Export-ExpirationAnalysis {
-    param(
-        [hashtable]$Analysis,
-        [string]$OutputFile
-    )
-    
-    Write-Host "`n📄 Exporting expiration analysis to CSV..." -ForegroundColor "Blue"
-    
-    try {
-        $csvData = @()
-        
-        foreach ($result in $Analysis.Results) {
-            if (-not $result.Error) {
-                # Summary row for each patron type
-                $csvData += [PSCustomObject]@{
-                    PatronType = $result.PatronType
-                    TotalFound = $result.TotalFound
-                    TotalAnalyzed = $result.TotalAnalyzed
-                    ExpiredCount = $result.ExpiredCount
-                    ActiveCount = $result.ActiveCount
-                    ExpirationRate = [math]::Round($result.ExpirationRate, 2)
-                    Status = if ($result.ExpirationRate -gt 50) { "HIGH_EXPIRY" } 
-                             elseif ($result.ExpirationRate -gt 25) { "MEDIUM_EXPIRY" } 
-                             elseif ($result.ExpirationRate -gt 0) { "LOW_EXPIRY" } 
-                             else { "ALL_ACTIVE" }
-                    Error = ""
-                }
-            } else {
-                $csvData += [PSCustomObject]@{
-                    PatronType = $result.PatronType
-                    TotalFound = 0
-                    TotalAnalyzed = 0
-                    ExpiredCount = 0
-                    ActiveCount = 0
-                    ExpirationRate = 0
-                    Status = "ERROR"
-                    Error = $result.Error
-                }
+            if ($users.Count -lt $limit) {
+                break
             }
         }
         
-        $csvData | Export-Csv -Path $OutputFile -NoTypeInformation -Encoding UTF8
-        Write-Host "✅ Analysis exported to: $OutputFile" -ForegroundColor "Green"
-        Write-Host "   Records: $($csvData.Count)" -ForegroundColor "Blue"
-        
-        # Also create detailed user export if requested
-        $detailedFile = $OutputFile -replace '\.csv$', '_detailed.csv'
-        
-        $userCsvData = @()
-        foreach ($result in $Analysis.Results) {
-            if (-not $result.Error -and $result.Users.Count -gt 0) {
-                foreach ($user in $result.Users) {
-                    $userCsvData += [PSCustomObject]@{
-                        PatronType = $result.PatronType
-                        PrimaryId = $user.PrimaryId
-                        FirstName = $user.FirstName
-                        LastName = $user.LastName
-                        Status = $user.Status
-                        ExpiryDate = if ($user.ExpiryDate) { $user.ExpiryDate.ToString("yyyy-MM-dd") } else { "" }
-                        IsExpired = $user.IsExpired
-                        DaysSinceExpiry = if ($user.DaysSinceExpiry) { $user.DaysSinceExpiry } else { "" }
-                    }
-                }
-            }
+        # Estimate based on sample
+        if ($totalProcessed -gt 0) {
+            $inactiveRate = $totalInactive / $totalProcessed
+            $estimatedTotal = [int]($inactiveRate * 62047)
+            Write-Host "   📊 Found $totalInactive inactive users in $totalProcessed sample" -ForegroundColor "Green"
+            Write-Host "   📊 Estimated total inactive users: $estimatedTotal" -ForegroundColor "Green"
+            return $estimatedTotal
         }
         
-        if ($userCsvData.Count -gt 0) {
-            $userCsvData | Export-Csv -Path $detailedFile -NoTypeInformation -Encoding UTF8
-            Write-Host "✅ Detailed user data exported to: $detailedFile" -ForegroundColor "Green"
-            Write-Host "   User records: $($userCsvData.Count)" -ForegroundColor "Blue"
-        }
-    }
-    catch {
-        Write-Host "❌ Failed to export CSV: $($_.Exception.Message)" -ForegroundColor "Red"
+        return $totalInactive
     }
 }
 
@@ -600,7 +379,7 @@ try {
     # Show startup banner
     Write-Host ""
     Write-Header "$ScriptName v$ScriptVersion" "Cyan"
-    Write-Host "PowerShell Edition - Analyze Patron Expiration Rates by Type" -ForegroundColor "Blue"
+    Write-Host "PowerShell Edition - Count Total Expired Users in Alma" -ForegroundColor "Blue"
     Write-Host ""
     
     # Load environment variables
@@ -612,18 +391,27 @@ try {
     # Initialize analyzer
     $analyzer = [AlmaExpirationAnalyzer]::new($credentials)
     
-    Write-Host "🚀 Starting expiration analysis..." -ForegroundColor "Green"
-    Write-Host "Patron types to analyze: $($PatronTypes -join ', ')" -ForegroundColor "Blue"
-    Write-Host "Max users per type: $SampleSize" -ForegroundColor "Blue"
+    Write-Host "🔍 Checking user_group for a test user..." -ForegroundColor "Blue"
+    $testUserId = "21222005633826"  # Faculty user
+    $testUser = $analyzer.CallAlmaApi("/users/$testUserId", @{ 'view' = 'full' }, 1)
+    if ($testUser) {
+        Write-Host "Test user ($testUserId) user_group: $($testUser.user_group | ConvertTo-Json -Depth 2)" -ForegroundColor "Yellow"
+    } else {
+        Write-Host "Could not fetch test user" -ForegroundColor "Red"
+    }
+    
+    Write-Host "� Starting expired users count..." -ForegroundColor "Green"
     Write-Host ""
     
-    # Run analysis
-    $analysis = $analyzer.AnalyzeMultiplePatronTypes($PatronTypes, $SampleSize)
+    # Run count
+    $totalExpired = $analyzer.CountTotalExpiredUsers()
     
     # Display results
-    Show-ExpirationAnalysis -Analysis $analysis -OutputFile $OutputFile
+    Write-Section "📊 TOTAL EXPIRED USERS COUNT" "Cyan"
+    Write-Host "Total expired users in Alma: $totalExpired" -ForegroundColor "Green"
+    Write-Host ""
     
-    Write-Host "`n✅ Expiration analysis completed successfully!" -ForegroundColor "Green"
+    Write-Host "`n✅ Expired users count completed successfully!" -ForegroundColor "Green"
     Write-Host "Total API calls made: $($analyzer.RequestCount)" -ForegroundColor "Blue"
     Write-Host "Total processing time: $((Get-Date) - $analyzer.StartTime | ForEach-Object { $_.ToString('mm\:ss') })" -ForegroundColor "Blue"
 }
