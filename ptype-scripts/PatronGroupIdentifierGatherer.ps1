@@ -317,12 +317,19 @@ function Select-PrimaryIdentifier {
 Write-Header -Title $ScriptName
 Write-Host "Version $ScriptVersion" -ForegroundColor DarkGray
 
+# Add whatever patron groups you want to query here
 $patronGroups = @(
-    'AdHoc',
-    'HELINUndergraduate',
-    'Internal',
-    'Visiting Faculty',
-    'HighSchool'
+    '999',
+    'Staff',
+    'Adjunct',
+    'RIResident',
+    'Faculty',
+    'Undergraduate',
+    'ILL',
+    'Reserves',
+    'Other',
+    'Gradstudent',
+    'FacultyStaff'
 )
 
 $almaConfig = Get-AlmaConfiguration
