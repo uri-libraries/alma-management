@@ -35,6 +35,15 @@ python patron-type-analyzer.py inspect UNDERGRADUATE
 python patron-type-analyzer.py export patron_data.csv
 ```
 
+### Patron Group Identifier Gatherer (Ruby)
+
+```bash
+ruby PatronGroupIdentifierGatherer.rb                # load .env
+ruby PatronGroupIdentifierGatherer.rb -e SANDBOX     # explicitly target sandbox
+```
+
+Use the same patron groups as the PowerShell tool; the Ruby script performs paginated `/users` queries, extracts each user’s primary identifier, and writes `PatronIdentifiers_<timestamp>.csv`. The environment switch (`-e/--environment`) behaves identically, and the script reads `ALMA_API_KEY` and `ALMA_API_BASE_URL` from your `.env` files.
+
 ## Prerequisites
 
 1. **API Access**: You need an Alma API key with:
@@ -164,6 +173,10 @@ The tool can generate CSV files with detailed data including:
 - Normal for large institutions (>20,000 patrons)
 - The tool includes progress indicators
 - You can interrupt and resume if needed
+
+**"OpenSSL certificate verify failed" when running `PatronGroupIdentifierGatherer.rb`**
+- Point Ruby to a CA bundle with `SSL_CERT_FILE` or `CURL_CA_BUNDLE`, or specify a CA directory via `SSL_CERT_DIR`.
+- As a last resort for troubleshooting, set `ALMA_SSL_ALLOW_INSECURE=1` to skip verification (not recommended for production use).
 
 **"Classification seems wrong"**
 - The automatic classification is based on naming patterns
