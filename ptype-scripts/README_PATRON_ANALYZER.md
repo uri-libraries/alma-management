@@ -21,6 +21,7 @@ This launches an easy-to-use interactive menu that guides you through all the an
 
 ### For Command Line Users
 
+**Python:**
 ```bash
 # Run comprehensive analysis
 python patron-type-analyzer.py analyze
@@ -34,6 +35,29 @@ python patron-type-analyzer.py inspect UNDERGRADUATE
 # Export all data to CSV
 python patron-type-analyzer.py export patron_data.csv
 ```
+
+**Ruby:**
+```bash
+# Run comprehensive analysis
+ruby patron_type_analyzer.rb analyze
+
+# List all patron types with counts
+ruby patron_type_analyzer.rb list
+
+# Inspect a specific patron type
+ruby patron_type_analyzer.rb inspect UNDERGRADUATE
+
+# Export all data to CSV
+ruby patron_type_analyzer.rb export patron_data.csv
+```
+
+### Fulfillment Policy Analyzer (Ruby)
+
+```bash
+ruby fulfillment_policy_analyzer.rb
+```
+
+The Ruby script mirrors `fulfillment-policy-analyzer.py` by loading `types.csv`, fetching all fulfillment rules and policies from Alma, comparing each patron type's policy set, and printing suggestions for types that share identical privileges. It honors `ALMA_API_KEY`, `ALMA_API_BASE_URL`, and the optional `ALMA_SSL_ALLOW_INSECURE` flag for SSL flexibility in your `.env` file.
 
 ### Patron Group Identifier Gatherer (Ruby)
 
