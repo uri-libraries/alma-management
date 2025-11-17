@@ -6,7 +6,7 @@ require 'json'
 require 'uri'
 require 'time'
 require 'dotenv/load'
-
+# the point of this script it to get detailed information about a user in Alma
 # --- Configuration ---
 # Load environment variables from .env file
 Dotenv.load
