@@ -6,10 +6,47 @@ require 'json'
 require 'uri'
 require 'time'
 require 'date'
-require 'dotenv/load'
+require 'dotenv'
 
-# Load environment variables
-Dotenv.load
+# Prompt for environment selection
+def select_environment
+  puts "\n" + ('=' * 60)
+  puts 'ALMA ENVIRONMENT SELECTION'
+  puts '=' * 60
+  puts "\nWhich environment would you like to analyze?"
+  puts "1. Production"
+  puts "2. Sandbox"
+  print "\nEnter your choice (1 or 2): "
+  
+  choice = gets.strip
+  
+  case choice
+  when '1', 'production', 'prod', 'p'
+    env_file = '.env'
+    env_name = 'Production'
+  when '2', 'sandbox', 'sand', 's'
+    env_file = '.env.sandbox'
+    env_name = 'Sandbox'
+  else
+    puts "\nInvalid choice. Defaulting to Production."
+    env_file = '.env'
+    env_name = 'Production'
+  end
+  
+  # Load the selected environment file
+  if File.exist?(env_file)
+    Dotenv.load(env_file)
+    puts "\n✅ Loaded #{env_name} environment from #{env_file}"
+  else
+    puts "\n❌ Error: #{env_file} not found!"
+    exit 1
+  end
+  
+  env_name
+end
+
+# Select and load environment
+ENVIRONMENT = select_environment
 
 API_KEY = ENV['ALMA_API_KEY']
 BASE_URL = ENV['ALMA_API_BASE_URL'] || 'https://api-na.hosted.exlibrisgroup.com'
@@ -157,7 +194,7 @@ end
 #   DateTime: The date entered by the user
 def prompt_for_date
   puts "\n" + ('=' * 60)
-  puts 'ALMA USER EXPIRATION CHECKER'
+  puts "ALMA USER EXPIRATION CHECKER (#{ENVIRONMENT})"
   puts '=' * 60
   puts "\nThis script will find all users that expired before a given date."
   puts "\nEnter a cutoff date to check for expired users."
@@ -210,9 +247,11 @@ end
 def main
   unless API_KEY && !API_KEY.empty?
     puts 'Error: ALMA_API_KEY not found in environment variables'
-    puts 'Please ensure your .env file contains ALMA_API_KEY'
+    puts "Please ensure your environment file contains ALMA_API_KEY"
     exit 1
   end
+  
+  puts "\n✅ Using #{ENVIRONMENT} environment"
   
   # Get cutoff date from user
   cutoff_date = prompt_for_date
