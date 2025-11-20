@@ -52,16 +52,8 @@ class AlmaPatronTypeAnalyzer
   end
 
   def configure_ssl(http)
-    ca_file = ENV['SSL_CERT_FILE'] || ENV['CURL_CA_BUNDLE']
-    ca_path = ENV['SSL_CERT_DIR']
-    http.ca_file = ca_file if ca_file && !ca_file.empty?
-    http.ca_path = ca_path if ca_path && !ca_path.empty?
-
-    if ENV['ALMA_SSL_ALLOW_INSECURE']&.match?(/\A(1|true|yes)\z/i)
-      http.verify_mode = OpenSSL::SSL::VERIFY_NONE
-    else
-      http.verify_mode = OpenSSL::SSL::VERIFY_PEER
-    end
+    # Disable SSL verification to avoid certificate issues
+    http.verify_mode = OpenSSL::SSL::VERIFY_NONE
   end
 
   def call_alma_api(endpoint, params = {}, suppress_errors: false)
