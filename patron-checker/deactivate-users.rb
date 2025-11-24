@@ -280,10 +280,10 @@ def main
         puts "Limiter reached: processed #{MAX_DEACTIVATIONS} users. Remove or comment out MAX_DEACTIVATIONS to process all."
         break
       end
-    puts "\n[#{index + 1}/#{identifiers.length}] Processing: #{user_id}"
+    puts "\n[#{idx + 1}/#{identifiers.length}] Processing: #{primary_id}"
     
     # Fetch current user data
-    user_data = get_user(user_id)
+    user_data = get_user(primary_id)
     
     unless user_data
       failed << { 'user_id' => user_id, 'reason' => 'Failed to fetch user' }
@@ -296,15 +296,15 @@ def main
     
     if current_status == 'INACTIVE'
       puts "  ℹ️  Already inactive - skipping"
-      skipped << user_id
+            skipped << primary_id
       next
     end
     
     # Deactivate user
-    result = deactivate_user(user_id, user_data)
+    result = deactivate_user(primary_id, user_data)
     if result[:success]
       puts "  ✅ Successfully deactivated"
-      successful << user_id
+            successful << primary_id
     else
       puts "  ❌ Failed to deactivate"
       failed << { 'user_id' => user_id, 'reason' => result[:error] || 'Update request failed' }
