@@ -5,6 +5,8 @@ require 'net/http'
 require 'json'
 require 'uri'
 require 'dotenv'
+# Limiter: Set to an integer to process only that many users. Comment out to process all.
+MAX_DEACTIVATIONS = 10 # Change this value or comment out to disable limit
 
 # Prompt for environment selection
 def select_environment
@@ -272,7 +274,12 @@ def main
   failed = []
   skipped = []
   
-  identifiers.each_with_index do |user_id, index|
+    identifiers.each_with_index do |primary_id, idx|
+      # Limiter: skip if over MAX_DEACTIVATIONS
+      if defined?(MAX_DEACTIVATIONS) && MAX_DEACTIVATIONS && idx >= MAX_DEACTIVATIONS
+        puts "Limiter reached: processed #{MAX_DEACTIVATIONS} users. Remove or comment out MAX_DEACTIVATIONS to process all."
+        break
+      end
     puts "\n[#{index + 1}/#{identifiers.length}] Processing: #{user_id}"
     
     # Fetch current user data
