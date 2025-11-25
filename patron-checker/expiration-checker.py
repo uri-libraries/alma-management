@@ -322,4 +322,9 @@ if __name__ == '__main__':
     # suppress insecure request warnings (we use verify=False to match repo's other scripts)
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    # Ensure QUICK_SCAN_LIMIT is safely handled even if commented out or removed
+    try:
+        QUICK_SCAN_LIMIT
+    except NameError:
+        QUICK_SCAN_LIMIT = None
     main()
