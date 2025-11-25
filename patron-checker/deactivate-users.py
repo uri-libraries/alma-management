@@ -99,7 +99,7 @@ def deactivate_user(api_key, base_url, primary_id, user_data):
         valid_types = {'mobile', 'home', 'office', 'other'}
         user_data['contact_info']['phone'] = [
             p for p in user_data['contact_info']['phone']
-            if p.get('phone_type', '').lower() in valid_types
+            if isinstance(p.get('phone_type', ''), str) and p.get('phone_type', '').lower() in valid_types
         ]
     # Deduplicate identifiers
     if 'user_identifier' in user_data:
