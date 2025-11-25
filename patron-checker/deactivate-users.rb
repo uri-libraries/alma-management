@@ -162,7 +162,7 @@ def deactivate_user(user_id, user_data)
   end
   
   # Modify the user status
-  user_data['status'] = { 'value' => 'INACTIVE' }
+  user_data['status'] = 'INACTIVE'
   
   request = Net::HTTP::Put.new(url)
   request['Authorization'] = "apikey #{API_KEY}"
