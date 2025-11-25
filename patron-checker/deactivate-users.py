@@ -12,7 +12,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 
 # Limiter: Set to an integer to process only that many users. Comment out to process all.
-MAX_DEACTIVATIONS = 10  # Change this value or comment out to disable limit
+MAX_DEACTIVATIONS = 30  # Change this value or comment out to disable limit
 
 def select_environment():
     print("\nSelect environment:")
@@ -89,8 +89,8 @@ def deactivate_user(api_key, base_url, primary_id, user_data):
         'Content-Type': 'application/json',
         'Accept': 'application/json'
     }
-    # Set status to INACTIVE
-    user_data['status'] = 'INACTIVE'
+    # Set status to INACTIVE as a dictionary (Alma API expects this structure)
+    user_data['status'] = { 'value': 'INACTIVE' }
     # Remove problematic fields if present
     for field in ['link', 'proxy_for_user', 'rs_libraries']:
         user_data.pop(field, None)
