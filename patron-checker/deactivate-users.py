@@ -186,6 +186,16 @@ def main():
             print("  ❌ Failed to deactivate")
             failed.append({'user_id': primary_id, 'reason': result.get('error', 'Update request failed')})
 
+        # Save progress every 100 users
+        if (idx + 1) % 100 == 0:
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            with open(f"deactivated_progress_{timestamp}.txt", 'w', encoding='utf-8') as f:
+                f.write('\n'.join(successful))
+            with open(f"already_inactive_progress_{timestamp}.txt", 'w', encoding='utf-8') as f:
+                f.write('\n'.join(skipped))
+            with open(f"deactivation_failed_progress_{timestamp}.json", 'w', encoding='utf-8') as f:
+                json.dump(failed, f, indent=2)
+            print(f"Progress saved after {idx + 1} users.")
         time.sleep(0.3)
 
     print("\n" + ('=' * 60))
