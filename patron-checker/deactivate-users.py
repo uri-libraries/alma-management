@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Alma Bulk User Deactivation Script (Python)
+Alma Bulk User Deactivation Script
+Brandon Katzir | bkatzir@uri.edu
 """
 
 import os
@@ -12,7 +13,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 
 # Limiter: Set to an integer to process only that many users. Comment out to process all.
-MAX_DEACTIVATIONS = 30  # Change this value or comment out to disable limit
+# MAX_DEACTIVATIONS = 30  # Change this value or comment out to disable limit
 
 def select_environment():
     print("\nSelect environment:")
@@ -125,7 +126,7 @@ def deactivate_user(api_key, base_url, primary_id, user_data):
 
 def main():
     print("=" * 60)
-    print("ALMA BULK USER DEACTIVATION TOOL (Python)")
+    print("ALMA BULK USER DEACTIVATION TOOL (KATZIR)")
     print("=" * 60)
 
     environment = select_environment()
