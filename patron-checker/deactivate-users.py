@@ -10,34 +10,27 @@ import json
 import time
 from datetime import datetime
 from dotenv import load_dotenv
+import argparse
 
 # Limiter: Set to an integer to process only that many users. Comment out to process all.
 MAX_DEACTIVATIONS = 30  # Change this value or comment out to disable limit
 
-def select_environment():
-    print("\nSelect environment:")
-    print("1. Production")
-    print("2. Sandbox")
-    while True:
-        choice = input("\nEnter choice (1 or 2): ").strip()
-        if choice == '1':
-            if os.path.exists('.env'):
-                load_dotenv('.env')
-                print("Loaded Production environment")
-                return 'production'
-            else:
-                print("Error: .env file not found")
-                sys.exit(1)
-        elif choice == '2':
-            if os.path.exists('.env.sandbox'):
-                load_dotenv('.env.sandbox')
-                print("Loaded Sandbox environment")
-                return 'sandbox'
-            else:
-                print("Error: .env.sandbox file not found")
-                sys.exit(1)
-        else:
-            print("Invalid choice. Please enter 1 or 2.")
+def select_environment_arg():
+    parser = argparse.ArgumentParser(description="Alma Bulk User Deactivation Script")
+    parser.add_argument('--sandbox', action='store_true', help='Use sandbox environment')
+    args = parser.parse_args()
+    if args.sandbox:
+        env_file = '.env.sandbox'
+        env_name = 'sandbox'
+    else:
+        env_file = '.env'
+        env_name = 'production'
+    if not os.path.exists(env_file):
+        print(f"Error: {env_file} file not found")
+        sys.exit(1)
+    load_dotenv(env_file)
+    print(f"Loaded {env_name.capitalize()} environment")
+    return env_name
 
 def read_identifiers(filename):
     """Read identifiers from a file.
@@ -128,7 +121,7 @@ def main():
     print("ALMA BULK USER DEACTIVATION TOOL (Python)")
     print("=" * 60)
 
-    environment = select_environment()
+    environment = select_environment_arg()
     api_key = os.getenv('ALMA_API_KEY')
     base_url = os.getenv('ALMA_API_BASE_URL')
 
@@ -145,10 +138,11 @@ def main():
     print(f"WARNING: This will change {len(identifiers)} users from ACTIVE to INACTIVE")
     print(f"Environment: {environment}")
     print('⚠️  ' * 20)
-    confirmation = input("\nAre you sure you want to proceed? (yes/no): ").strip().lower()
-    if confirmation not in ('yes', 'y'):
-        print("\n❌ Operation cancelled by user")
-        sys.exit(0)
+    # Remove confirmation input for automation
+    # confirmation = input("\nAre you sure you want to proceed? (yes/no): ").strip().lower()
+    # if confirmation not in ('yes', 'y'):
+    #     print("\n❌ Operation cancelled by user")
+    #     sys.exit(0)
 
     print("\n" + ('-' * 60))
     print("Processing users...")
