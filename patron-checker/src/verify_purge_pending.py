@@ -179,30 +179,30 @@ def main():
     print("\n" + "=" * 60)
     print("VERIFICATION RESULTS FOR PURGEPENDING GROUP")
     print("=" * 60)
-    print(f"\n📊 TOTAL USERS IN GROUP: {len(user_ids)}")
-    print(f"✅ Users with expired dates (passed expiration): {len(expired_users)}")
-    print(f"⚠️  Users NOT yet expired: {len(not_expired_users)}")
-    print(f"⚠️  Users with no expiration date: {len(no_expiration_users)}")
+    print(f"\nTOTAL USERS IN GROUP: {len(user_ids)}")
+    print(f"[OK] Users with expired dates (passed expiration): {len(expired_users)}")
+    print(f"[WARN] Users NOT yet expired: {len(not_expired_users)}")
+    print(f"[WARN] Users with no expiration date: {len(no_expiration_users)}")
     if failed_users:
-        print(f"❌ Failed to fetch details: {len(failed_users)}")
+        print(f"[ERROR] Failed to fetch details: {len(failed_users)}")
     
     if not_expired_users:
         print("\n" + "=" * 60)
-        print("⚠️  USERS NOT YET EXPIRED:")
+        print("[WARN] USERS NOT YET EXPIRED:")
         print("=" * 60)
         for user in not_expired_users:
             print(f"  {user['primary_id']} (expires: {user['expiry_date']})")
     
     if no_expiration_users:
         print("\n" + "=" * 60)
-        print("⚠️  USERS WITH NO EXPIRATION DATE:")
+        print("[WARN] USERS WITH NO EXPIRATION DATE:")
         print("=" * 60)
         for primary_id in no_expiration_users:
             print(f"  {primary_id}")
     
     if not not_expired_users and not no_expiration_users:
         print("\n" + "=" * 60)
-        print("✅ ALL USERS IN PURGEPENDING HAVE PASSED THEIR EXPIRATION DATE")
+        print("[OK] ALL USERS IN PURGEPENDING HAVE PASSED THEIR EXPIRATION DATE")
         print("=" * 60)
 
 if __name__ == '__main__':

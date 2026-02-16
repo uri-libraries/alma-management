@@ -70,10 +70,10 @@ def get_user(api_key, base_url, primary_id):
         if response.status_code == 200:
             return response.json()
         else:
-            print(f"  ❌ Failed to fetch user {primary_id}: {response.status_code}")
+            print(f"  [ERROR] Failed to fetch user {primary_id}: {response.status_code}")
             return None
     except Exception as e:
-        print(f"  ❌ Exception fetching user {primary_id}: {e}")
+        print(f"  [ERROR] Exception fetching user {primary_id}: {e}")
         return None
 
 def deactivate_user(api_key, base_url, primary_id, user_data):
@@ -111,10 +111,10 @@ def deactivate_user(api_key, base_url, primary_id, user_data):
             return {'success': True}
         else:
             error_msg = response.text
-            print(f"  ❌ Failed to deactivate {primary_id}: {error_msg}")
+            print(f"  [ERROR] Failed to deactivate {primary_id}: {error_msg}")
             return {'success': False, 'error': error_msg}
     except Exception as e:
-        print(f"  ❌ Exception deactivating {primary_id}: {e}")
+        print(f"  [ERROR] Exception deactivating {primary_id}: {e}")
         return {'success': False, 'error': str(e)}
 
 def main():
@@ -133,16 +133,16 @@ def main():
     filename = 'deactivate.txt'
     print(f"\nReading identifiers from {filename}...")
     identifiers = read_identifiers(filename)
-    print(f"✅ Found {len(identifiers)} identifiers to process")
+    print(f"[OK] Found {len(identifiers)} identifiers to process")
 
-    print("\n" + ('⚠️  ' * 20))
+    print("\n" + ('! ' * 30))
     print(f"WARNING: This will change {len(identifiers)} users from ACTIVE to INACTIVE")
     print(f"Environment: {environment}")
-    print('⚠️  ' * 20)
+    print('! ' * 30)
     # Remove confirmation input for automation
     # confirmation = input("\nAre you sure you want to proceed? (yes/no): ").strip().lower()
     # if confirmation not in ('yes', 'y'):
-    #     print("\n❌ Operation cancelled by user")
+    #     print("\n[ERROR] Operation cancelled by user")
     #     sys.exit(0)
 
     print("\n" + ('-' * 60))
@@ -169,16 +169,16 @@ def main():
         print(f"  Current status: {current_status}")
 
         if current_status == 'INACTIVE':
-            print("  ℹ️  Already inactive - skipping")
+            print("  [INFO] Already inactive - skipping")
             skipped.append(primary_id)
             continue
 
         result = deactivate_user(api_key, base_url, primary_id, user_data)
         if result['success']:
-            print("  ✅ Successfully deactivated")
+            print("  [OK] Successfully deactivated")
             successful.append(primary_id)
         else:
-            print("  ❌ Failed to deactivate")
+            print("  [ERROR] Failed to deactivate")
             failed.append({'user_id': primary_id, 'reason': result.get('error', 'Update request failed')})
 
         # Save progress every 100 users
@@ -197,9 +197,9 @@ def main():
     print("SUMMARY")
     print('=' * 60)
     print(f"\nTotal processed: {len(identifiers)}")
-    print(f"✅ Successfully deactivated: {len(successful)}")
-    print(f"ℹ️  Already inactive (skipped): {len(skipped)}")
-    print(f"❌ Failed: {len(failed)}")
+    print(f"[OK] Successfully deactivated: {len(successful)}")
+    print(f"[INFO] Already inactive (skipped): {len(skipped)}")
+    print(f"[ERROR] Failed: {len(failed)}")
 
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 
@@ -207,19 +207,19 @@ def main():
         success_file = f"deactivated_{timestamp}.txt"
         with open(success_file, 'w', encoding='utf-8') as f:
             f.write('\n'.join(successful))
-        print(f"\n✅ Successfully deactivated users saved to: {success_file}")
+        print(f"\n[OK] Successfully deactivated users saved to: {success_file}")
 
     if skipped:
         skipped_file = f"already_inactive_{timestamp}.txt"
         with open(skipped_file, 'w', encoding='utf-8') as f:
             f.write('\n'.join(skipped))
-        print(f"ℹ️  Already inactive users saved to: {skipped_file}")
+        print(f"[INFO] Already inactive users saved to: {skipped_file}")
 
     if failed:
         failed_file = f"deactivation_failed_{timestamp}.json"
         with open(failed_file, 'w', encoding='utf-8') as f:
             json.dump(failed, f, indent=2)
-        print(f"❌ Failed deactivations saved to: {failed_file}")
+        print(f"[ERROR] Failed deactivations saved to: {failed_file}")
 
     report = {
         'timestamp': timestamp,
@@ -235,7 +235,7 @@ def main():
     report_file = f"deactivation_report_{timestamp}.json"
     with open(report_file, 'w', encoding='utf-8') as f:
         json.dump(report, f, indent=2)
-    print(f"\n📄 Detailed report saved to: {report_file}")
+    print(f"\n[REPORT] Detailed report saved to: {report_file}")
 
     print("\n" + ('=' * 60))
     print("Done!")
