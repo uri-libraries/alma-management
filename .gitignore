@@ -1,0 +1,19 @@
+.DS_Store
+**/.DS_Store
+
+# Python environments and caches
+venv/
+**/venv/
+.venv/
+**/.venv/
+__pycache__/
+*.pyc
+
+# Local secrets/config
+.env
+.env.*
+
+# Common generated data exports
+*.csv
+*.json
+*.txt
