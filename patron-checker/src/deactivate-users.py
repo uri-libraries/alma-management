@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Alma Bulk User Deactivation Script
-Brandon Katzir | bkatzir@uri.edu
+Brandon Katzir
 """
 
 import os
