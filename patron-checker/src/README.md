@@ -1,6 +1,6 @@
 # Patron Checker `src` Scripts
 
-This folder contains operational scripts for Alma user lifecycle workflows, including expiration review, deactivation, purge-date management, and group validation. Most scripts call Alma REST endpoints and read API settings from `.env` (or `.env.sandbox` where supported). Several scripts read local input files in the working directory and write timestamped outputs for audit/review. 
+This folder contains operational scripts for Alma user lifecycle workflows, including expiration review, deactivation, purge-date management, and group validation. All of the scripts call Alma REST endpoints and read API settings from `.env` (or `.env.sandbox` where supported). Several scripts read local input files in the working directory and write timestamped outputs for audit/review. A few of the scripts ask for environment first--in this case, you can add Alma production credentials to an .env file and Alma Sandbox credentials to an .env.sandbox, enabling you to test the script in your sandbox environment before using it in prod. 
 
 ## `add_purge_dates.py`
 `add_purge_dates.py` reads `blank-purge-date.csv` and extracts each `Primary ID` to update through the Alma Users API. For each user, it fetches the current record, sets `purge_date`, and sends the full record back with a `PUT` request. The script is currently configured to apply a fixed purge date (`2025-11-30Z`) to every listed user. It prints progress and a success/failure summary so you can confirm how many updates were applied.
