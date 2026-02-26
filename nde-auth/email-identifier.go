@@ -14,14 +14,14 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// User represents a user from the Alma API (simplified)
+// User represents a user from Alma API with relevant fields only
 type User struct {
 	PrimaryID      string           `json:"primary_id"`
 	ContactInfo    ContactInfo      `json:"contact_info"`
 	UserIdentifier []UserIdentifier `json:"user_identifier"`
 }
 
-// ContactInfo contains user's contact details
+// ContactInfo contains user's email address FROM contact info section of the API response
 type ContactInfo struct {
 	Email []Email `json:"email"`
 }
@@ -52,6 +52,7 @@ type UsersResponse struct {
 	} `json:"user"`
 }
 
+// Sandbox / Prod prompt loading the appropriat .env file based on user selection
 func selectEnvironment() string {
 	fmt.Println("\nSelect environment:")
 	fmt.Println("1. Sandbox")
@@ -82,6 +83,7 @@ func selectEnvironment() string {
 	}
 }
 
+// getUsers fetches a list of user IDs from the Alma API with a specified limit
 func getUsers(apiKey, baseURL string, limit int) ([]string, error) {
 	url := fmt.Sprintf("%s/almaws/v1/users?limit=%d&offset=0", baseURL, limit)
 	req, err := http.NewRequest("GET", url, nil)
@@ -116,6 +118,7 @@ func getUsers(apiKey, baseURL string, limit int) ([]string, error) {
 	return userIDs, nil
 }
 
+// getUser fetches detailed information for a specific user by ID
 func getUser(userID, apiKey, baseURL string) (*User, error) {
 	url := fmt.Sprintf("%s/almaws/v1/users/%s", baseURL, userID)
 	req, err := http.NewRequest("GET", url, nil)
@@ -144,6 +147,7 @@ func getUser(userID, apiKey, baseURL string) (*User, error) {
 	return &user, nil
 }
 
+// updateUserIdentifier updates the user's identifiers by adding a new INST_ID if it doesn't already exist, and then sends a PUT request to update the user in Alma
 func updateUserIdentifier(user *User, uriEmail, apiKey, baseURL string) (*User, error) {
 	identifierExists := false
 	for _, identifier := range user.UserIdentifier {
@@ -152,7 +156,7 @@ func updateUserIdentifier(user *User, uriEmail, apiKey, baseURL string) (*User, 
 			break
 		}
 	}
-
+	// Only add the new identifier if it doesn't already exist
 	if !identifierExists {
 		user.UserIdentifier = append(user.UserIdentifier, UserIdentifier{
 			Value:       uriEmail,
@@ -175,7 +179,7 @@ func updateUserIdentifier(user *User, uriEmail, apiKey, baseURL string) (*User, 
 
 	url := fmt.Sprintf("%s/almaws/v1/users/%s", baseURL, user.PrimaryID)
 
-	// Create a temporary user object for PUT request, omitting certain fields
+	// Prepare the data for the PUT request, ensuring we only include the necessary fields
 	updateData := make(map[string]interface{})
 	updateData["primary_id"] = user.PrimaryID
 	updateData["contact_info"] = user.ContactInfo
@@ -216,6 +220,7 @@ func updateUserIdentifier(user *User, uriEmail, apiKey, baseURL string) (*User, 
 	return &updatedUser, nil
 }
 
+// main function orchestrates the flow: it prompts the user to select an environment, loads the appropriate .env file, fetches a list of users, processes each user to find @uri.edu emails, and updates their identifiers if necessary, while providing detailed logging throughout the process.
 func main() {
 	_ = selectEnvironment()
 
