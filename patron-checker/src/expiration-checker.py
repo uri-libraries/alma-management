@@ -9,7 +9,8 @@ Behavior:
 - Prompts for a cutoff date (YYYY-MM-DD) and finds users whose expiration date is strictly before that date.
 - Fetches users via Alma Users API with pagination.
 - Exports results to a timestamped CSV and JSON file.
-- Uses `verify=False` for SSL (matches other scripts in this repo).
+
+If you haven't already, you'll need to use pip to install requests and python-dotenv. 
 
 Save as `expiration-checker.py` and run with:
 
@@ -18,6 +19,8 @@ Save as `expiration-checker.py` and run with:
 
 """
 
+
+# === Import required libraries ===
 import os
 import sys
 import csv
@@ -27,17 +30,23 @@ from datetime import datetime, date
 import requests
 from requests.exceptions import RequestException
 import re
-
-# Network settings
-REQUEST_TIMEOUT = 30  # seconds for each HTTP request
-PAGE_LIMIT = 50       # number of users to request per page (lower to reduce per-call time)
-# Quick-scan limiter: set to an integer to stop after that many users (for testing).
-# Set to None to disable.
-QUICK_SCAN_LIMIT = 1000
-DEBUG_SAMPLE = False  # set True to print the first returned user for debugging
 from dotenv import load_dotenv
 
+# === Configuration and network settings ===
+# Timeout for HTTP requests (in seconds)
+REQUEST_TIMEOUT = 30
+# Number of users to fetch per API call (pagination)
+PAGE_LIMIT = 50
+# Limit number of users processed for quick testing (set to None to disable)
+QUICK_SCAN_LIMIT = 1000
+# Print the first user returned for debugging if True
+DEBUG_SAMPLE = False
 
+############################################################
+# Function: select_environment
+# Prompts the user to select Production or Sandbox environment.
+# Loads the appropriate .env file for API credentials.
+############################################################
 def select_environment():
     print("\nSelect environment:")
     print("1. Production")
@@ -63,20 +72,28 @@ def select_environment():
         else:
             print('Invalid choice. Please enter 1 or 2.')
 
-
+# This is the prompt for the cutoff date
+############################################################
+# Function: prompt_for_date
+# Prompts the user to enter a cutoff date in YYYY-MM-DD format.
+# Returns a datetime object representing the end of that day.
+############################################################
 def prompt_for_date():
     while True:
         s = input('\nEnter cutoff date (YYYY-MM-DD): ').strip()
         try:
             d = datetime.strptime(s, '%Y-%m-%d').date()
-            # Return a datetime at the end of the day to match Ruby behavior
             return datetime(d.year, d.month, d.day, 23, 59, 59)
         except Exception:
             print('Invalid date format. Use YYYY-MM-DD.')
 
 
+############################################################
+# Function: parse_alma_date
+# Tries to parse various Alma date formats into a datetime object.
+# Returns None if parsing fails.
+############################################################
 def parse_alma_date(s):
-    """Parse various Alma date formats into a datetime object (UTC/local) or return None."""
     if not s:
         return None
     s = str(s).strip()
@@ -99,6 +116,11 @@ def parse_alma_date(s):
         return None
 
 
+############################################################
+# Function: extract_email_from_contact
+# Extracts the preferred email address from a user's contact info.
+# Returns an empty string if not found.
+############################################################
 def extract_email_from_contact(contact_info):
     if not contact_info:
         return ''
@@ -112,11 +134,12 @@ def extract_email_from_contact(contact_info):
     return emails[0].get('email_address', '')
 
 
+############################################################
+# Function: get_all_users
+# Generator that fetches all users from Alma via paginated API calls.
+# Yields each user as a dictionary.
+############################################################
 def get_all_users(api_key, base_url, q=None):
-    """Yield user dicts fetched from Alma (pagination).
-
-    Each yielded dict is the raw user JSON object returned by Alma.
-    """
     limit = PAGE_LIMIT
     offset = 0
     headers = {
@@ -163,8 +186,11 @@ def get_all_users(api_key, base_url, q=None):
         time.sleep(0.2)
 
 
+############################################################
+# Function: sanitize_group_name
+# Returns a filesystem-safe version of a group name for filenames.
+############################################################
 def sanitize_group_name(name: str) -> str:
-    """Return a filesystem-safe short name for a group."""
     if not name:
         return 'group'
     s = name.strip()
@@ -173,8 +199,12 @@ def sanitize_group_name(name: str) -> str:
     return s or 'group'
 
 
+############################################################
+# Function: get_user_groups
+# Fetches user groups from Alma configuration endpoint.
+# Returns a list of group names.
+############################################################
 def get_user_groups(api_key, base_url):
-    """Fetch user groups from Alma configuration endpoint and return a list of names."""
     headers = {
         'Authorization': f'apikey {api_key}',
         'Accept': 'application/json'
@@ -213,6 +243,11 @@ def get_user_groups(api_key, base_url):
     return groups
 
 
+############################################################
+# Function: collect_expired_users
+# Iterates through all users and collects those whose expiration date
+# is before or equal to the cutoff date. Returns the list and total scanned.
+############################################################
 def collect_expired_users(api_key, base_url, cutoff_date, q=None, max_processed=None):
     results = []
     count = 0
@@ -261,6 +296,11 @@ def collect_expired_users(api_key, base_url, cutoff_date, q=None, max_processed=
     return results, count
 
 
+############################################################
+# Function: save_csv
+# Saves the list of expired users to a timestamped CSV file.
+# Returns the filename.
+############################################################
 def save_csv(rows, environment, suffix=None):
     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
     if suffix:
@@ -276,6 +316,11 @@ def save_csv(rows, environment, suffix=None):
     return filename
 
 
+############################################################
+# Function: save_json
+# Saves the list of expired users to a timestamped JSON file.
+# Returns the filename.
+############################################################
 def save_json(rows, environment, suffix=None):
     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
     if suffix:
@@ -287,6 +332,14 @@ def save_json(rows, environment, suffix=None):
     return filename
 
 
+############################################################
+# Main program logic
+# - Prints header
+# - Loads environment and API credentials
+# - Prompts for cutoff date
+# - Scans users and collects expired ones
+# - Saves results to CSV and JSON
+############################################################
 def main():
     print('=' * 60)
     print('ALMA EXPIRATION CHECKER (Python)')
@@ -318,11 +371,15 @@ def main():
     print('\nDone!')
 
 
+############################################################
+# Script entry point
+# - Suppresses SSL warnings for demo purposes
+# - Ensures QUICK_SCAN_LIMIT is defined
+# - Calls main()
+############################################################
 if __name__ == '__main__':
-    # suppress insecure request warnings (we use verify=False to match repo's other scripts)
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-    # Ensure QUICK_SCAN_LIMIT is safely handled even if commented out or removed
     try:
         QUICK_SCAN_LIMIT
     except NameError:
