@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
 Add purge dates to users in blank-purge-date.csv via Alma API.
-Sets purge date to 2025-11-30 for all Primary IDs in the spreadsheet.
+Sets purge date to input date for all Primary IDs in the spreadsheet. CSV may have other columns, but must have a "Primary ID" column. Make sure to set ALMA_API_KEY and ALMA_API_BASE_URL in a .env file before running.
 """
 
 import os
 import sys
 import csv
+from datetime import datetime
 import requests
 from dotenv import load_dotenv
 
@@ -53,6 +54,16 @@ def update_user_purge_date(api_key, base_url, primary_id, purge_date):
         print(f"Error updating user {primary_id}: {e}")
         return False
 
+def prompt_for_purge_date():
+    """Prompt for a purge date in YYYY-MM-DD format and return Alma's expected value."""
+    while True:
+        raw_date = input("Enter the purge date to set (YYYY-MM-DD): ").strip()
+        try:
+            datetime.strptime(raw_date, '%Y-%m-%d')
+            return f"{raw_date}Z"
+        except ValueError:
+            print("Error: Please enter a valid date in YYYY-MM-DD format.")
+
 def main():
     """Process blank-purge-date.csv and add purge dates via API."""
     load_env()
@@ -64,7 +75,7 @@ def main():
         sys.exit(1)
     
     input_file = 'blank-purge-date.csv'
-    purge_date = '2025-11-30Z'
+    purge_date = prompt_for_purge_date()
     
     try:
         with open(input_file, 'r', encoding='utf-8') as infile:

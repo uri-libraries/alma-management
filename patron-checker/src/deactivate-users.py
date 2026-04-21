@@ -242,7 +242,6 @@ def main():
     print('=' * 60)
 
 if __name__ == '__main__':
-    # Suppress SSL warnings since we're using verify=False
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     main()
